@@ -19,16 +19,34 @@ pub struct App {
 }
 
 fn draw_grid(stdout: &mut RawTerminal<io::Stdout>, app: &App) -> io::Result<()> {
-    let header = "\x1b[35m";
     let border = "\x1b[33;2m";
     let reset = "\x1b[0m";
 
-    write!(stdout, "{header}")?;
-    write!(stdout, " ██████  ██████  ██   ██  ██████ \r\n")?;
-    write!(stdout, "     ██  ██  ██  ██   ██  ██  ██ \r\n")?;
-    write!(stdout, " ██████  ██  ██  ███████  ██████ \r\n")?;
-    write!(stdout, " ██      ██  ██       ██  ██  ██ \r\n")?;
-    write!(stdout, " ██████  ██████       ██  ██████ \r\n")?;
+    let header_rows = [
+        " ██████  ██████  ██   ██  ██████ ",
+        "     ██  ██  ██  ██   ██  ██  ██ ",
+        " ██████  ██  ██  ███████  ██████ ",
+        " ██      ██  ██       ██  ██  ██ ",
+        " ██████  ██████       ██  ██████ ",
+    ];
+    for (y, row) in header_rows.into_iter().enumerate() {
+        for (x, ch) in row.chars().enumerate() {
+            let hue = ((x + y) * 6) % 360;
+            let (r, g, b) = hsl_to_rgb(hue as f64, 0.6, 0.4);
+            write!(stdout, "\x1b[38;2;{r};{g};{b}m")?;
+            write!(stdout, "{}", ch)?;
+        }
+        write!(stdout, "\r\n")?;
+    }
+    write!(stdout, "{reset}")?;
+    write!(stdout, "\r\n")?;
+
+    write!(stdout, "\x1b[32;2m")?;
+    write!(stdout, "         ")?;
+    write!(stdout, "{:^7}", app.win_count)?;
+    write!(stdout, "{reset}")?;
+    write!(stdout, "\x1b[31;2m")?;
+    write!(stdout, " {:^7}", app.loss_count)?;
     write!(stdout, "{reset}")?;
     write!(stdout, "\r\n")?;
 
@@ -101,7 +119,7 @@ fn draw_grid(stdout: &mut RawTerminal<io::Stdout>, app: &App) -> io::Result<()> 
                 2048 => "\x1b[38;2;237;194;46m",
                 _ => "\x1b[31m",
             };
-            write!(stdout, "{reset}{color}")?;
+            write!(stdout, "{reset}{color}\x1b[1m")?;
             write!(stdout, "{:^5}", value)?;
             write!(stdout, "{border}")?;
         }
@@ -121,17 +139,6 @@ fn draw_grid(stdout: &mut RawTerminal<io::Stdout>, app: &App) -> io::Result<()> 
         write!(stdout, "─────")?;
     }
     write!(stdout, "─┘")?;
-    write!(stdout, "{reset}")?;
-    write!(stdout, "\r\n")?;
-
-    write!(stdout, "\x1b[32;2m")?;
-    write!(stdout, "         ")?;
-    write!(stdout, "{:^7}", app.win_count)?;
-    write!(stdout, "{reset}")?;
-    write!(stdout, "\x1b[0;2m")?;
-    write!(stdout, "|")?;
-    write!(stdout, "\x1b[31;2m")?;
-    write!(stdout, "{:^7}", app.loss_count)?;
     write!(stdout, "{reset}")?;
     write!(stdout, "\r\n")?;
 
@@ -353,14 +360,10 @@ impl App {
 
 fn main() {
     let mut app = App::default();
-    app.grid[0][0] = 2;
-    app.grid[0][1] = 2;
-    app.grid[0][3] = 16;
-    app.grid[1][0] = 32;
-    app.grid[1][2] = 128;
-    app.grid[1][3] = 16;
-    app.grid[2][0] = 1024;
-    app.grid[2][1] = 1024;
+
+    for _ in 0..5 {
+        app.spawn_tile();
+    }
 
     let stdin = io::stdin();
     let mut stdout = io::stdout().into_raw_mode().unwrap();
@@ -393,4 +396,30 @@ fn main() {
 
     // Disable raw mode and show the cursor on program exit
     write!(stdout, "{}", termion::cursor::Show).unwrap();
+}
+
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
+
+    let (r, g, b) = if h >= 0.0 && h < 60.0 {
+        (c, x, 0.0)
+    } else if h >= 60.0 && h < 120.0 {
+        (x, c, 0.0)
+    } else if h >= 120.0 && h < 180.0 {
+        (0.0, c, x)
+    } else if h >= 180.0 && h < 240.0 {
+        (0.0, x, c)
+    } else if h >= 240.0 && h < 300.0 {
+        (x, 0.0, c)
+    } else {
+        (c, 0.0, x)
+    };
+
+    let r = ((r + m) * 255.0) as u8;
+    let g = ((g + m) * 255.0) as u8;
+    let b = ((b + m) * 255.0) as u8;
+
+    (r, g, b)
 }
